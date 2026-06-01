@@ -2,21 +2,35 @@
 
 Neste projeto, selecionamos um dataset real e adequado para limpeza, análise exploratória e classificação probabilística.
 
-## Stack escolhida
+## Stack
 - Backend: Python + FastAPI
 - Ciência de dados: pandas, numpy, scikit-learn
-- Dashboard: Streamlit + Plotly
+- Frontend: React + Vite
 
 ## Estrutura
 - `data/raw`: dados brutos
 - `data/processed`: dados tratados
 - `src`: scripts de preprocessamento, treino e avaliação
-- `app`: dashboard interativo
+- `backend`: API para predição
+- `frontend`: dashboard React
 - `reports`: relatório técnico e artefatos
 
-## Próximos passos
-1. Ingestão e validação do dataset
-2. Limpeza e tratamento
-3. EDA
-4. Bayes + 2 classificadores
-5. Dashboard interativo
+## Rodando o projeto
+### 1) Backend
+```bash
+python3 -m uvicorn backend.app:app --reload
+```
+
+### 2) Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Pipeline de dados
+1. `python3 src/preprocess.py`
+2. `python3 src/clean.py`
+3. `python3 src/eda.py`
+4. `python3 src/prepare_model_data.py`
+5. `python3 src/train_models.py`
