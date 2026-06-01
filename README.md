@@ -1,6 +1,8 @@
-# Projeto Estatística e Probabilidade
+# Projeto Estatística e Probabilidade - US Counties COVID-19
 
-Stack escolhida:
+Neste projeto, selecionamos um dataset real e adequado para limpeza, análise exploratória e classificação probabilística.
+
+## Stack escolhida
 - Backend: Python + FastAPI
 - Ciência de dados: pandas, numpy, scikit-learn
 - Dashboard: Streamlit + Plotly
