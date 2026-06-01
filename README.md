@@ -10,8 +10,8 @@ Neste projeto, selecionamos um dataset real e adequado para limpeza, análise ex
 ## Estrutura
 - `data/raw`: dados brutos
 - `data/processed`: dados tratados
-- `src`: scripts de preprocessamento, treino e avaliação
 - `backend`: API para predição
+- `backend/pipeline`: scripts de preprocessamento, treino e avaliação
 - `frontend`: dashboard React
 - `reports`: relatório técnico e artefatos
 
@@ -29,8 +29,8 @@ npm run dev
 ```
 
 ## Pipeline de dados
-1. `python3 src/preprocess.py`
-2. `python3 src/clean.py`
-3. `python3 src/eda.py`
-4. `python3 src/prepare_model_data.py`
-5. `python3 src/train_models.py`
+1. `python3 backend/pipeline/preprocess.py`
+2. `python3 backend/pipeline/clean.py`
+3. `python3 backend/pipeline/eda.py`
+4. `python3 backend/pipeline/prepare_model_data.py`
+5. `python3 backend/pipeline/train_models.py`

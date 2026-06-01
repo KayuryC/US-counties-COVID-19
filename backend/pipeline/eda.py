@@ -114,3 +114,4 @@ if __name__ == "__main__":
         figures_dir=Path("reports/figures"),
     )
     print("EDA concluida.")
+      
