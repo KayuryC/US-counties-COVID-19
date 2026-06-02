@@ -75,7 +75,18 @@ export default function App() {
       { state: 'New York', code: 'NY', casos: 5267378, mortes: 67938 },
       { state: 'Illinois', code: 'IL', casos: 3215032, mortes: 35734 },
     ],
+    state_rates: fallbackStateTotals.map((d) => ({ ...d, cfr: Number(((d.mortes / d.casos) * 100).toFixed(3)) })),
+    top_counties: [],
     class_balance: fallbackClassBalance,
+    monthly_trend: [],
+    weekday_profile: [],
+    peak_summary: {
+      peak_cases_date: '-',
+      peak_cases_ma7: 0,
+      peak_deaths_date: '-',
+      peak_deaths_ma7: 0,
+      state_cases_deaths_corr: 0,
+    },
     trend_dates: fallbackTrendDates,
     trend_cases_ma7: fallbackTrendCases,
     trend_deaths_ma7: fallbackTrendDeaths,
@@ -136,6 +147,17 @@ export default function App() {
       state: d.state,
       value: metric === 'casos' ? d.casos : d.mortes,
     }))
+  const metricLabel = metric === 'casos' ? 'Casos' : 'Mortes'
+  const topCounties = [...(overview.top_counties || [])]
+    .sort((a, b) => (metric === 'casos' ? b.casos - a.casos : b.mortes - a.mortes))
+    .slice(0, 10)
+  const cfrRank = [...(overview.state_rates || [])].sort((a, b) => b.cfr - a.cfr).slice(0, 10)
+  const basePlotLayout = {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    margin: { l: 56, r: 20, t: 18, b: 48 },
+    font: { family: 'Avenir Next, Segoe UI, sans-serif', size: 11 },
+  }
 
   return (
     <main className="container">
@@ -327,6 +349,135 @@ export default function App() {
                 style={{ width: '100%', height: '420px' }}
               />
             </div>
+          </article>
+
+          <article className="card chartCard full">
+            <h3>Objetivo: destacar picos, associacao entre variaveis e momentos criticos</h3>
+            <div className="insightGrid">
+              <div><span>Pico de casos MA7</span><strong>{formatNumber(Math.round(overview.peak_summary.peak_cases_ma7))}</strong><small>{overview.peak_summary.peak_cases_date}</small></div>
+              <div><span>Pico de mortes MA7</span><strong>{formatNumber(Math.round(overview.peak_summary.peak_deaths_ma7))}</strong><small>{overview.peak_summary.peak_deaths_date}</small></div>
+              <div><span>Correlacao casos x mortes</span><strong>{overview.peak_summary.state_cases_deaths_corr}</strong><small>por estado, data final</small></div>
+            </div>
+          </article>
+
+          <article className="card chartCard">
+            <h3>Objetivo: comparar relacao entre casos e mortes por estado</h3>
+            <Plot
+              data={[
+                {
+                  type: 'scatter',
+                  mode: 'markers',
+                  x: (overview.state_rates || []).map((d) => d.casos),
+                  y: (overview.state_rates || []).map((d) => d.mortes),
+                  text: (overview.state_rates || []).map((d) => `${d.state}<br>CFR: ${d.cfr}%`),
+                  marker: {
+                    color: (overview.state_rates || []).map((d) => d.cfr),
+                    colorscale: 'Viridis',
+                    size: 10,
+                    opacity: 0.82,
+                    colorbar: { title: 'CFR %' },
+                  },
+                  hovertemplate: '%{text}<br>Casos: %{x:,}<br>Mortes: %{y:,}<extra></extra>',
+                },
+              ]}
+              layout={{
+                ...basePlotLayout,
+                xaxis: { title: 'Casos acumulados', gridcolor: '#dbe7ef' },
+                yaxis: { title: 'Mortes acumuladas', gridcolor: '#dbe7ef' },
+              }}
+              config={{ displayModeBar: false, responsive: true }}
+              style={{ width: '100%', height: '330px' }}
+            />
+          </article>
+
+          <article className="card chartCard">
+            <h3>Objetivo: identificar estados com maior taxa de letalidade acumulada</h3>
+            <Plot
+              data={[
+                {
+                  type: 'bar',
+                  orientation: 'h',
+                  y: cfrRank.map((d) => d.state).reverse(),
+                  x: cfrRank.map((d) => d.cfr).reverse(),
+                  marker: { color: '#0b4f6c' },
+                  hovertemplate: '%{y}<br>CFR: %{x:.2f}%<extra></extra>',
+                },
+              ]}
+              layout={{
+                ...basePlotLayout,
+                xaxis: { title: 'CFR (%)', gridcolor: '#dbe7ef' },
+                yaxis: { automargin: true },
+              }}
+              config={{ displayModeBar: false, responsive: true }}
+              style={{ width: '100%', height: '330px' }}
+            />
+          </article>
+
+          <article className="card chartCard">
+            <h3>Objetivo: comparar a evolucao mensal de {metricLabel.toLowerCase()}</h3>
+            <Plot
+              data={[
+                {
+                  type: 'bar',
+                  x: (overview.monthly_trend || []).map((d) => d.month),
+                  y: (overview.monthly_trend || []).map((d) => metric === 'casos' ? d.casos : d.mortes),
+                  marker: { color: metric === 'casos' ? '#0f766e' : '#0b4f6c' },
+                  hovertemplate: 'Mes: %{x}<br>' + metricLabel + ': %{y:,}<extra></extra>',
+                },
+              ]}
+              layout={{
+                ...basePlotLayout,
+                xaxis: { title: 'Mes', tickangle: -35 },
+                yaxis: { title: metricLabel, gridcolor: '#dbe7ef' },
+              }}
+              config={{ displayModeBar: false, responsive: true }}
+              style={{ width: '100%', height: '330px' }}
+            />
+          </article>
+
+          <article className="card chartCard">
+            <h3>Objetivo: listar condados que mais concentram {metricLabel.toLowerCase()}</h3>
+            <Plot
+              data={[
+                {
+                  type: 'bar',
+                  orientation: 'h',
+                  y: topCounties.map((d) => `${d.county}, ${d.state}`).reverse(),
+                  x: topCounties.map((d) => metric === 'casos' ? d.casos : d.mortes).reverse(),
+                  marker: { color: '#0ea5e9' },
+                  hovertemplate: '%{y}<br>' + metricLabel + ': %{x:,}<extra></extra>',
+                },
+              ]}
+              layout={{
+                ...basePlotLayout,
+                xaxis: { title: metricLabel, gridcolor: '#dbe7ef' },
+                yaxis: { automargin: true },
+              }}
+              config={{ displayModeBar: false, responsive: true }}
+              style={{ width: '100%', height: '330px' }}
+            />
+          </article>
+
+          <article className="card chartCard full">
+            <h3>Objetivo: observar padrao medio por dia da semana</h3>
+            <Plot
+              data={[
+                {
+                  type: 'bar',
+                  x: (overview.weekday_profile || []).map((d) => d.weekday),
+                  y: (overview.weekday_profile || []).map((d) => metric === 'casos' ? d.casos : d.mortes),
+                  marker: { color: metric === 'casos' ? '#0f766e' : '#0b4f6c' },
+                  hovertemplate: 'Dia: %{x}<br>Media de ' + metricLabel + ': %{y:.2f}<extra></extra>',
+                },
+              ]}
+              layout={{
+                ...basePlotLayout,
+                xaxis: { title: 'Dia da semana' },
+                yaxis: { title: `Media diaria de ${metricLabel}`, gridcolor: '#dbe7ef' },
+              }}
+              config={{ displayModeBar: false, responsive: true }}
+              style={{ width: '100%', height: '300px' }}
+            />
           </article>
         </div>
       </section>}

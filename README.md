@@ -17,8 +17,14 @@ Neste projeto, selecionamos um dataset real e adequado para limpeza, análise ex
 
 ## Rodando o projeto
 ### 1) Backend
+Na raiz do projeto:
 ```bash
 python3 -m uvicorn backend.app:app --reload
+```
+
+Se o terminal estiver dentro de `backend/`:
+```bash
+python3 -m uvicorn app:app --reload
 ```
 
 ### 2) Frontend
@@ -34,3 +40,5 @@ npm run dev
 3. `python3 backend/pipeline/eda.py`
 4. `python3 backend/pipeline/prepare_model_data.py`
 5. `python3 backend/pipeline/train_models.py`
+
+Observacao: `data/processed/us-counties-model.csv` nao fica versionado no GitHub por exceder o limite de tamanho. Ele pode ser regenerado com `python3 backend/pipeline/prepare_model_data.py`.

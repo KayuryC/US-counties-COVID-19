@@ -229,6 +229,28 @@ button:hover {
   background: #f8fafc;
   overflow: hidden;
 }
+.insightGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.insightGrid div {
+  border: 1px solid #dbe7ef;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f8fafc;
+}
+.insightGrid span, .insightGrid small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.insightGrid strong {
+  display: block;
+  color: var(--ink);
+  font-size: 24px;
+  margin: 4px 0;
+}
 
 .probBox {
   margin-top: 14px;
@@ -276,6 +298,7 @@ pre { background: #0b1020; color: #d1fae5; padding: 10px; border-radius: 10px; o
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .layout { grid-template-columns: 1fr; }
   .results { grid-template-columns: 1fr; }
+  .insightGrid { grid-template-columns: 1fr; }
   .classRow { grid-template-columns: 1fr; }
   .hBarRow { grid-template-columns: 1fr; }
   .hBarRow small { text-align: left; }

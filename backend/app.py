@@ -28,9 +28,43 @@ CLEAN_CSV = ROOT / "data" / "processed" / "us-counties-clean.csv"
 MODEL_CSV = ROOT / "data" / "processed" / "us-counties-model.csv"
 
 
+def build_class_balance(clean_df: pd.DataFrame) -> list[dict]:
+    if MODEL_CSV.exists():
+        model_df = pd.read_csv(MODEL_CSV)
+        class_balance = (
+            model_df["risk_level"].value_counts(normalize=True).mul(100).round(2).to_dict()
+        )
+    else:
+        model_df = clean_df.sort_values(["state", "county", "date"]).copy()
+        model_df["new_cases"] = (
+            model_df.groupby(["state", "county"])["cases"].diff().fillna(model_df["cases"])
+        )
+        model_df["new_cases"] = model_df["new_cases"].clip(lower=0)
+        model_df["new_cases_ma7"] = (
+            model_df.groupby(["state", "county"])["new_cases"]
+            .rolling(7, min_periods=1)
+            .mean()
+            .reset_index(level=["state", "county"], drop=True)
+        )
+        q1 = model_df["new_cases_ma7"].quantile(0.33)
+        q2 = model_df["new_cases_ma7"].quantile(0.66)
+        risk_level = pd.cut(
+            model_df["new_cases_ma7"],
+            bins=[-float("inf"), q1, q2, float("inf")],
+            labels=["low", "medium", "high"],
+            include_lowest=True,
+        )
+        class_balance = risk_level.value_counts(normalize=True).mul(100).round(2).to_dict()
+
+    return [
+        {"classe": "low", "pct": float(class_balance.get("low", 0.0))},
+        {"classe": "medium", "pct": float(class_balance.get("medium", 0.0))},
+        {"classe": "high", "pct": float(class_balance.get("high", 0.0))},
+    ]
+
+
 def load_overview_data() -> dict:
     clean_df = pd.read_csv(CLEAN_CSV, parse_dates=["date"])
-    model_df = pd.read_csv(MODEL_CSV)
 
     min_date = clean_df["date"].min().date().isoformat()
     max_date = clean_df["date"].max().date().isoformat()
@@ -41,15 +75,19 @@ def load_overview_data() -> dict:
     final_snapshot = clean_df[clean_df["date"] == clean_df["date"].max()]
     state_totals_df = final_snapshot.groupby("state", as_index=False)[["cases", "deaths"]].sum()
     state_totals_payload = [{"state": row["state"], "casos": int(row["cases"]), "mortes": int(row["deaths"])} for _, row in state_totals_df.iterrows()]
-
-    class_balance = (
-        model_df["risk_level"].value_counts(normalize=True).mul(100).round(2).to_dict()
-    )
-    class_balance_payload = [
-        {"classe": "low", "pct": float(class_balance.get("low", 0.0))},
-        {"classe": "medium", "pct": float(class_balance.get("medium", 0.0))},
-        {"classe": "high", "pct": float(class_balance.get("high", 0.0))},
+    state_rates_df = state_totals_df.copy()
+    state_rates_df["cfr"] = (state_rates_df["deaths"] / state_rates_df["cases"].where(state_rates_df["cases"] > 0) * 100).fillna(0)
+    state_rates_payload = [
+        {
+            "state": row["state"],
+            "casos": int(row["cases"]),
+            "mortes": int(row["deaths"]),
+            "cfr": round(float(row["cfr"]), 3),
+        }
+        for _, row in state_rates_df.iterrows()
     ]
+
+    class_balance_payload = build_class_balance(clean_df)
 
     daily_us = clean_df.groupby("date", as_index=False)[["cases", "deaths"]].sum()
     daily_us["new_cases"] = daily_us["cases"].diff().fillna(0).clip(lower=0)
@@ -59,6 +97,38 @@ def load_overview_data() -> dict:
     trend_dates = [d.date().isoformat() for d in daily_us["date"].tolist()]
     trend_cases = [float(x) for x in daily_us["new_cases_ma7"].round(2).tolist()]
     trend_deaths = [float(x) for x in daily_us["new_deaths_ma7"].round(2).tolist()]
+
+    monthly = daily_us.copy()
+    monthly["month"] = monthly["date"].dt.to_period("M").astype(str)
+    monthly_trend = monthly.groupby("month", as_index=False)[["new_cases", "new_deaths"]].sum()
+    monthly_payload = [
+        {"month": row["month"], "casos": int(row["new_cases"]), "mortes": int(row["new_deaths"])}
+        for _, row in monthly_trend.iterrows()
+    ]
+
+    weekday = daily_us.copy()
+    weekday["weekday"] = weekday["date"].dt.dayofweek
+    weekday_profile = weekday.groupby("weekday", as_index=False)[["new_cases", "new_deaths"]].mean()
+    weekday_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    weekday_payload = [
+        {
+            "weekday": weekday_labels[int(row["weekday"])],
+            "casos": round(float(row["new_cases"]), 2),
+            "mortes": round(float(row["new_deaths"]), 2),
+        }
+        for _, row in weekday_profile.iterrows()
+    ]
+
+    peak_cases = daily_us.loc[daily_us["new_cases_ma7"].idxmax()]
+    peak_deaths = daily_us.loc[daily_us["new_deaths_ma7"].idxmax()]
+    state_corr = state_totals_df[["cases", "deaths"]].corr().iloc[0, 1]
+    peak_summary = {
+        "peak_cases_date": peak_cases["date"].date().isoformat(),
+        "peak_cases_ma7": round(float(peak_cases["new_cases_ma7"]), 2),
+        "peak_deaths_date": peak_deaths["date"].date().isoformat(),
+        "peak_deaths_ma7": round(float(peak_deaths["new_deaths_ma7"]), 2),
+        "state_cases_deaths_corr": round(float(state_corr), 4),
+    }
 
     # Agregacoes por janela temporal para filtros globais no frontend.
     state_daily = clean_df.groupby(["state", "date"], as_index=False)[["cases", "deaths"]].sum().sort_values(["state", "date"])
@@ -109,6 +179,21 @@ def load_overview_data() -> dict:
                 }
             )
 
+    top_counties_df = (
+        final_snapshot[~final_snapshot["county"].str.contains("Unknown", case=False, na=False)]
+        .sort_values("cases", ascending=False)
+        .head(15)
+    )
+    top_counties_payload = [
+        {
+            "county": row["county"],
+            "state": row["state"],
+            "casos": int(row["cases"]),
+            "mortes": int(row["deaths"]),
+        }
+        for _, row in top_counties_df.iterrows()
+    ]
+
     return {
         "kpis": {
             "period_start": min_date,
@@ -118,9 +203,14 @@ def load_overview_data() -> dict:
             "counties": n_counties,
         },
         "state_totals": state_totals_payload,
+        "state_rates": state_rates_payload,
         "window_state_totals": window_state_totals,
         "state_heatmap": heatmap_payload,
+        "top_counties": top_counties_payload,
         "class_balance": class_balance_payload,
+        "monthly_trend": monthly_payload,
+        "weekday_profile": weekday_payload,
+        "peak_summary": peak_summary,
         "trend_dates": trend_dates,
         "trend_cases_ma7": trend_cases,
         "trend_deaths_ma7": trend_deaths,
