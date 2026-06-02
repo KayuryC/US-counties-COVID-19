@@ -2,6 +2,7 @@
 
 ## Configuracao
 - Dataset de modelagem: `data/processed/us-counties-model.csv`
+- Artefatos salvos em: `backend/models`
 - Features: `['month', 'day_of_week', 'new_cases', 'new_deaths', 'cfr']`
 - Alvo: `risk_level`
 - Amostras usadas: `450000`

@@ -110,6 +110,122 @@ button:hover {
 .results span { display: block; font-size: 12px; color: var(--muted); }
 .results strong { font-size: 18px; color: var(--ink); text-transform: uppercase; }
 .error { color: #b91c1c; font-weight: 600; margin-top: 8px; }
+.classificationShell { display: grid; gap: 14px; }
+.classificationGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: stretch;
+}
+.modelBrief p, .formulaCard p { color: #334155; margin: 0; line-height: 1.45; }
+.modelBrief code {
+  background: #e2e8f0;
+  padding: 1px 5px;
+  border-radius: 6px;
+}
+.riskLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.riskLegend span {
+  border: 1px solid #dbe7ef;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: #f8fafc;
+  font-size: 13px;
+}
+.predictForm {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.predictForm button { grid-column: 1 / -1; }
+.resultPanel { display: grid; align-content: start; }
+.methodGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.methodCard {
+  min-height: 104px;
+  border: 1px solid #dbe7ef;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 12px;
+  display: grid;
+  align-content: space-between;
+}
+.methodCard span { color: var(--muted); font-size: 12px; }
+.methodCard strong { color: var(--ink); text-transform: uppercase; font-size: 18px; }
+.methodCard.low { border-color: #14b8a6; }
+.methodCard.medium { border-color: #0ea5e9; }
+.methodCard.high { border-color: #0b4f6c; }
+.posteriorPanel {
+  margin-top: 14px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+.posteriorPanel h4 { margin: 0 0 10px; font-size: 14px; }
+.probabilityGrid {
+  display: grid;
+  gap: 10px;
+}
+.methodProb {
+  border: 1px solid #dbe7ef;
+  border-radius: 10px;
+  padding: 10px;
+  background: #f8fafc;
+}
+.methodProb > strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--ink);
+}
+.posteriorRow {
+  display: grid;
+  grid-template-columns: 78px 1fr 54px;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 9px;
+  text-transform: capitalize;
+}
+.posteriorTrack {
+  height: 12px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.posteriorTrack i { display: block; height: 100%; border-radius: 999px; }
+.posteriorTrack i.low { background: #14b8a6; }
+.posteriorTrack i.medium { background: #0ea5e9; }
+.posteriorTrack i.high { background: #0b4f6c; }
+.formulaGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 12px 0;
+}
+.formulaGrid div {
+  border: 1px solid #dbe7ef;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f8fafc;
+}
+.formulaGrid span {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  color: #fff;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.formulaGrid strong, .formulaGrid small { display: block; }
+.formulaGrid small { color: var(--muted); margin-top: 4px; }
 
 .chartCard { min-height: 240px; }
 .chartCard.full { grid-column: 1 / -1; }
@@ -297,7 +413,10 @@ pre { background: #0b1020; color: #d1fae5; padding: 10px; border-radius: 10px; o
 @media (max-width: 900px) {
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .layout { grid-template-columns: 1fr; }
+  .classificationGrid { grid-template-columns: 1fr; }
+  .predictForm { grid-template-columns: 1fr; }
   .results { grid-template-columns: 1fr; }
+  .methodGrid, .formulaGrid { grid-template-columns: 1fr; }
   .insightGrid { grid-template-columns: 1fr; }
   .classRow { grid-template-columns: 1fr; }
   .hBarRow { grid-template-columns: 1fr; }

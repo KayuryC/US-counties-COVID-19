@@ -18,6 +18,12 @@ const fallbackClassBalance = [
 const fallbackTrendCases = [8, 12, 18, 26, 38, 54, 72, 70, 64, 82, 98, 91, 76, 58, 48, 55, 68, 75, 63, 50]
 const fallbackTrendDeaths = [2, 4, 5, 8, 11, 18, 24, 23, 21, 28, 31, 30, 27, 22, 18, 19, 22, 24, 20, 17]
 const fallbackTrendDates = fallbackTrendCases.map((_, i) => `T-${fallbackTrendCases.length - i}`)
+const riskClasses = ['low', 'medium', 'high']
+const methodLabels = {
+  bayes: 'Bayes',
+  logistic_regression: 'Regressao Logistica',
+  decision_tree: 'Arvore de Decisao',
+}
 
 const formatNumber = (n) => new Intl.NumberFormat('en-US').format(n)
 
@@ -152,6 +158,7 @@ export default function App() {
     .sort((a, b) => (metric === 'casos' ? b.casos - a.casos : b.mortes - a.mortes))
     .slice(0, 10)
   const cfrRank = [...(overview.state_rates || [])].sort((a, b) => b.cfr - a.cfr).slice(0, 10)
+  const getProbabilities = (key) => result?.[key]?.probabilities || { low: 0, medium: 0, high: 0 }
   const basePlotLayout = {
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(0,0,0,0)',
@@ -485,34 +492,81 @@ export default function App() {
       {activeSection === 'secao-2' && <section className="sectionBlock reveal" id="secao-2">
         <div className="sectionTitle">
           <h2>Secao 2 - Classificacao Probabilistica</h2>
-          <p>Entrada de atributos, probabilidade bayesiana e comparacao visual entre os tres metodos.</p>
+          <p>Entrada de atributos, probabilidade posterior por Bayes e comparacao entre os tres metodos.</p>
         </div>
-        <div className="layout">
-          <div className="card prediction">
-            <h3>Entrada de Atributos</h3>
-            <form onSubmit={onSubmit} className="formGrid">
-              <label>Month <input type="number" min="1" max="12" value={form.month} onChange={(e) => onChange('month', e.target.value)} /></label>
-              <label>Day of week <input type="number" min="0" max="6" value={form.day_of_week} onChange={(e) => onChange('day_of_week', e.target.value)} /></label>
-              <label>New cases <input type="number" value={form.new_cases} onChange={(e) => onChange('new_cases', e.target.value)} /></label>
-              <label>New deaths <input type="number" value={form.new_deaths} onChange={(e) => onChange('new_deaths', e.target.value)} /></label>
-              <label>CFR (aceita 0.01 ou 0,01) <input type="text" value={String(form.cfr).replace('.', ',')} onChange={(e) => onChange('cfr', e.target.value)} /></label>
-              <button type="submit">Calcular Predicao</button>
-            </form>
-            {error && <p className="error">{error}</p>}
+
+        <div className="classificationShell">
+          <article className="card modelBrief">
+            <h3>O que esta sendo classificado?</h3>
+            <p>O alvo e <code>risk_level</code>, uma categoria criada a partir da media movel de 7 dias de novos casos por condado (<code>new_cases_ma7</code>).</p>
+            <div className="riskLegend">
+              <span><i className="dot low" /> Low: baixa intensidade</span>
+              <span><i className="dot medium" /> Medium: intensidade intermediaria</span>
+              <span><i className="dot high" /> High: alta intensidade</span>
+            </div>
+          </article>
+
+          <div className="classificationGrid">
+            <div className="card prediction">
+              <h3>Atributos informados pelo usuario</h3>
+              <form onSubmit={onSubmit} className="predictForm">
+                <label>Mes do registro <input type="number" min="1" max="12" value={form.month} onChange={(e) => onChange('month', e.target.value)} /></label>
+                <label>Dia da semana (0 a 6) <input type="number" min="0" max="6" value={form.day_of_week} onChange={(e) => onChange('day_of_week', e.target.value)} /></label>
+                <label>Novos casos <input type="number" value={form.new_cases} onChange={(e) => onChange('new_cases', e.target.value)} /></label>
+                <label>Novas mortes <input type="number" value={form.new_deaths} onChange={(e) => onChange('new_deaths', e.target.value)} /></label>
+                <label>Taxa CFR <input type="text" value={String(form.cfr).replace('.', ',')} onChange={(e) => onChange('cfr', e.target.value)} /></label>
+                <button type="submit">Calcular classificacao</button>
+              </form>
+              {error && <p className="error">{error}</p>}
+            </div>
+
+            <div className="card resultPanel">
+              <h3>Resultado comparativo</h3>
+              <div className="methodGrid">
+                {Object.entries(methodLabels).map(([key, label]) => (
+                  <article key={key} className={`methodCard ${result?.[key]?.predicted_class || ''}`}>
+                    <span>{label}</span>
+                    <strong>{result?.[key]?.predicted_class || 'Aguardando'}</strong>
+                  </article>
+                ))}
+              </div>
+
+              <div className="posteriorPanel">
+                <h4>Distribuicao de probabilidades por metodo</h4>
+                <div className="probabilityGrid">
+                  {Object.entries(methodLabels).map(([key, label]) => {
+                    const probabilities = getProbabilities(key)
+                    return (
+                      <div className="methodProb" key={key}>
+                        <strong>{label}</strong>
+                        {riskClasses.map((klass) => {
+                          const value = Number(probabilities[klass] || 0)
+                          const width = value <= 1 ? value * 100 : value
+                          return (
+                            <div className="posteriorRow" key={klass}>
+                              <span>{klass}</span>
+                              <div className="posteriorTrack"><i className={klass} style={{ width: `${width}%` }} /></div>
+                              <small>{width ? `${width.toFixed(1)}%` : '-'}</small>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="card">
-            <h3>Comparacao de Resultados</h3>
-            <div className="results">
-              <article><span>Bayes</span><strong>{result?.bayes?.predicted_class || '-'}</strong></article>
-              <article><span>Regressao Logistica</span><strong>{result?.logistic_regression?.predicted_class || '-'}</strong></article>
-              <article><span>Arvore de Decisao</span><strong>{result?.decision_tree?.predicted_class || '-'}</strong></article>
+          <article className="card formulaCard">
+            <h3>Como a classificacao probabilistica e calculada?</h3>
+            <div className="formulaGrid">
+              <div><span>1</span><strong>Priori P(C)</strong><small>frequencia de cada classe no dataset</small></div>
+              <div><span>2</span><strong>Verossimilhanca P(X|C)</strong><small>probabilidade dos atributos observados em cada classe</small></div>
+              <div><span>3</span><strong>Posteriori P(C|X)</strong><small>classe mais provavel apos observar os atributos</small></div>
             </div>
-            <div className="probBox">
-              <p>Probabilidades Bayes (posteriori):</p>
-              <pre>{JSON.stringify(result?.bayes?.probabilities || { low: '-', medium: '-', high: '-' }, null, 2)}</pre>
-            </div>
-          </div>
+            <p className="legend">Observacao: o endpoint de predicao ainda esta em modo provisório; a proxima etapa e conectar os artefatos reais de Bayes, Regressao Logistica e Arvore.</p>
+          </article>
         </div>
       </section>}
 

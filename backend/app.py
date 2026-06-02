@@ -2,7 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pathlib import Path
+from typing import Optional
 
+import joblib
+import numpy as np
 import pandas as pd
 
 app = FastAPI(title="US Counties COVID-19 API")
@@ -26,6 +29,56 @@ class PredictInput(BaseModel):
 ROOT = Path(__file__).resolve().parents[1]
 CLEAN_CSV = ROOT / "data" / "processed" / "us-counties-clean.csv"
 MODEL_CSV = ROOT / "data" / "processed" / "us-counties-model.csv"
+MODELS_DIR = ROOT / "backend" / "models"
+FEATURES = ["month", "day_of_week", "new_cases", "new_deaths", "cfr"]
+RISK_CLASSES = ["low", "medium", "high"]
+
+
+def load_prediction_artifacts() -> Optional[dict[str, object]]:
+    paths = {
+        "bayes": MODELS_DIR / "manual_bayes.joblib",
+        "logistic_regression": MODELS_DIR / "logistic_regression.joblib",
+        "decision_tree": MODELS_DIR / "decision_tree.joblib",
+    }
+    if not all(path.exists() for path in paths.values()):
+        return None
+    return {name: joblib.load(path) for name, path in paths.items()}
+
+
+def gaussian_logpdf(x: np.ndarray, mean: np.ndarray, var: np.ndarray) -> np.ndarray:
+    var = np.maximum(var, 1e-9)
+    return -0.5 * (np.log(2 * np.pi * var) + ((x - mean) ** 2) / var)
+
+
+def predict_bayes(row: np.ndarray, artifact: dict[str, object]) -> dict:
+    classes = list(artifact["classes"])
+    log_posteriors = (
+        np.log(artifact["priors"])
+        + gaussian_logpdf(row, artifact["means"], artifact["vars"]).sum(axis=1)
+    )
+    shifted = log_posteriors - np.max(log_posteriors)
+    probabilities = np.exp(shifted) / np.exp(shifted).sum()
+    probability_payload = {
+        klass: float(probabilities[classes.index(klass)]) if klass in classes else 0.0
+        for klass in RISK_CLASSES
+    }
+    return {
+        "predicted_class": str(classes[int(np.argmax(probabilities))]),
+        "probabilities": probability_payload,
+    }
+
+
+def predict_sklearn(row: np.ndarray, model: object) -> dict:
+    prediction = str(model.predict([row])[0])
+    payload = {"predicted_class": prediction}
+    if hasattr(model, "predict_proba"):
+        probabilities = model.predict_proba([row])[0]
+        classes = list(model.classes_)
+        payload["probabilities"] = {
+            klass: float(probabilities[classes.index(klass)]) if klass in classes else 0.0
+            for klass in RISK_CLASSES
+        }
+    return payload
 
 
 def build_class_balance(clean_df: pd.DataFrame) -> list[dict]:
@@ -218,6 +271,7 @@ def load_overview_data() -> dict:
 
 
 OVERVIEW_CACHE = load_overview_data()
+PREDICTION_ARTIFACTS = load_prediction_artifacts()
 
 
 @app.get('/health')
@@ -232,18 +286,33 @@ def analytics_overview():
 
 @app.post('/predict')
 def predict(payload: PredictInput):
-    # Placeholder until model artifacts are served from training pipeline.
-    score = payload.new_cases + 5 * payload.new_deaths + 100 * payload.cfr
-    if score < 5:
-        risk = "low"
-    elif score < 25:
-        risk = "medium"
-    else:
-        risk = "high"
+    row = np.array(
+        [
+            payload.month,
+            payload.day_of_week,
+            payload.new_cases,
+            payload.new_deaths,
+            payload.cfr,
+        ],
+        dtype=float,
+    )
+
+    if PREDICTION_ARTIFACTS:
+        return {
+            "bayes": predict_bayes(row, PREDICTION_ARTIFACTS["bayes"]),
+            "logistic_regression": predict_sklearn(
+                row, PREDICTION_ARTIFACTS["logistic_regression"]
+            ),
+            "decision_tree": predict_sklearn(row, PREDICTION_ARTIFACTS["decision_tree"]),
+            "model_status": "real_artifacts_loaded",
+        }
 
     return {
-        "bayes": {"predicted_class": risk, "probabilities": {"low": 0.33, "medium": 0.33, "high": 0.34}},
-        "logistic_regression": {"predicted_class": risk},
-        "decision_tree": {"predicted_class": risk},
-        "note": "Endpoint scaffold pronto; integrar modelos reais no proximo passo."
+        "bayes": {
+            "predicted_class": "unavailable",
+            "probabilities": {"low": 0.0, "medium": 0.0, "high": 0.0},
+        },
+        "logistic_regression": {"predicted_class": "unavailable"},
+        "decision_tree": {"predicted_class": "unavailable"},
+        "model_status": "missing_artifacts_run_python3_backend_pipeline_train_models",
     }

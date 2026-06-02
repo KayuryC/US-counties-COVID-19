@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
@@ -36,27 +37,44 @@ def _gaussian_logpdf(x: np.ndarray, mean: np.ndarray, var: np.ndarray) -> np.nda
 def fit_predict_manual_bayes(
     x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray
 ) -> np.ndarray:
-    classes = np.unique(y_train)
-    class_priors: dict[str, float] = {}
-    class_means: dict[str, np.ndarray] = {}
-    class_vars: dict[str, np.ndarray] = {}
+    artifact = fit_manual_bayes(x_train, y_train)
+    classes = artifact["classes"]
+
+    predictions: list[str] = []
+    for row in x_test:
+        posteriors = manual_bayes_log_posteriors(row, artifact)
+        predictions.append(classes[int(np.argmax(posteriors))])
+    return np.array(predictions)
+
+
+def fit_manual_bayes(x_train: np.ndarray, y_train: np.ndarray) -> dict[str, object]:
+    classes = np.array(["low", "medium", "high"])
+    class_priors: list[float] = []
+    class_means: list[np.ndarray] = []
+    class_vars: list[np.ndarray] = []
 
     n = len(y_train)
     for c in classes:
         x_c = x_train[y_train == c]
-        class_priors[c] = len(x_c) / n
-        class_means[c] = x_c.mean(axis=0)
-        class_vars[c] = x_c.var(axis=0)
+        class_priors.append(len(x_c) / n)
+        class_means.append(x_c.mean(axis=0))
+        class_vars.append(x_c.var(axis=0))
 
-    predictions: list[str] = []
-    for row in x_test:
-        posteriors: dict[str, float] = {}
-        for c in classes:
-            log_prior = np.log(class_priors[c])
-            log_likelihood = _gaussian_logpdf(row, class_means[c], class_vars[c]).sum()
-            posteriors[c] = log_prior + log_likelihood
-        predictions.append(max(posteriors, key=posteriors.get))
-    return np.array(predictions)
+    return {
+        "classes": classes,
+        "priors": np.array(class_priors),
+        "means": np.vstack(class_means),
+        "vars": np.vstack(class_vars),
+        "features": FEATURES,
+    }
+
+
+def manual_bayes_log_posteriors(row: np.ndarray, artifact: dict[str, object]) -> np.ndarray:
+    priors = artifact["priors"]
+    means = artifact["means"]
+    variances = artifact["vars"]
+
+    return np.log(priors) + _gaussian_logpdf(row, means, variances).sum(axis=1)
 
 
 def summarize_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, object]:
@@ -76,7 +94,7 @@ def summarize_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, objec
     }
 
 
-def train_and_evaluate(input_csv: Path, output_report: Path) -> None:
+def train_and_evaluate(input_csv: Path, output_report: Path, model_dir: Path) -> None:
     df = pd.read_csv(input_csv)
     df = df.replace([np.inf, -np.inf], np.nan)
     df = df.dropna(subset=FEATURES + [TARGET])
@@ -96,6 +114,7 @@ def train_and_evaluate(input_csv: Path, output_report: Path) -> None:
     )
 
     # 1) Bayes manual (modelo gaussiano por classe)
+    bayes_artifact = fit_manual_bayes(x_train, y_train)
     bayes_pred = fit_predict_manual_bayes(x_train, y_train, x_test)
     bayes_metrics = summarize_metrics(y_test, bayes_pred)
 
@@ -121,11 +140,17 @@ def train_and_evaluate(input_csv: Path, output_report: Path) -> None:
     dt_pred = dt_model.predict(x_test)
     dt_metrics = summarize_metrics(y_test, dt_pred)
 
+    model_dir.mkdir(parents=True, exist_ok=True)
+    joblib.dump(bayes_artifact, model_dir / "manual_bayes.joblib")
+    joblib.dump(lr_model, model_dir / "logistic_regression.joblib")
+    joblib.dump(dt_model, model_dir / "decision_tree.joblib")
+
     output_report.parent.mkdir(parents=True, exist_ok=True)
     with output_report.open("w", encoding="utf-8") as f:
         f.write("# Relatorio de Modelagem e Comparacao\n\n")
         f.write("## Configuracao\n")
         f.write(f"- Dataset de modelagem: `{input_csv}`\n")
+        f.write(f"- Artefatos salvos em: `{model_dir}`\n")
         f.write(f"- Features: `{FEATURES}`\n")
         f.write(f"- Alvo: `{TARGET}`\n")
         f.write(f"- Amostras usadas: `{len(df)}`\n")
@@ -159,5 +184,6 @@ if __name__ == "__main__":
     train_and_evaluate(
         input_csv=Path("data/processed/us-counties-model.csv"),
         output_report=Path("reports/model_comparison_report.md"),
+        model_dir=Path("backend/models"),
     )
     print("Treinamento e avaliacao concluidos.")
