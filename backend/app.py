@@ -118,6 +118,11 @@ def build_class_balance(clean_df: pd.DataFrame) -> list[dict]:
 
 def load_overview_data() -> dict:
     clean_df = pd.read_csv(CLEAN_CSV, parse_dates=["date"])
+    missing_deaths_count = int(clean_df["deaths"].isna().sum())
+    missing_deaths_locations = sorted(
+        clean_df.loc[clean_df["deaths"].isna(), "state"].dropna().unique().tolist()
+    )
+    clean_df["deaths"] = clean_df["deaths"].fillna(0)
 
     min_date = clean_df["date"].min().date().isoformat()
     max_date = clean_df["date"].max().date().isoformat()
@@ -254,6 +259,8 @@ def load_overview_data() -> dict:
             "rows": n_rows,
             "states": n_states,
             "counties": n_counties,
+            "missing_deaths": missing_deaths_count,
+            "missing_deaths_locations": missing_deaths_locations,
         },
         "state_totals": state_totals_payload,
         "state_rates": state_rates_payload,

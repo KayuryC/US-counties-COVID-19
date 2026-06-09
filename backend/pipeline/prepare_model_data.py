@@ -11,6 +11,8 @@ def prepare_model_data(
     report_path: Path,
 ) -> None:
     df = pd.read_csv(input_csv, parse_dates=["date"])
+    df["deaths_was_missing"] = df["deaths"].isna()
+    df["deaths"] = df["deaths"].fillna(0)
     df = df.sort_values(["state", "county", "date"]).reset_index(drop=True)
 
     group_cols = ["state", "county"]
@@ -61,6 +63,7 @@ def prepare_model_data(
             "date",
             "state",
             "county",
+            "deaths_was_missing",
             "month",
             "day_of_week",
             "cases",
@@ -85,8 +88,13 @@ def prepare_model_data(
         f.write("- `risk_level` com classes: `low`, `medium`, `high`.\n")
         f.write("- Critério: quantis 33% e 66% de `new_cases_ma7` (novos casos media movel 7 dias por condado).\n\n")
         f.write("## Variaveis preditoras principais\n")
-        f.write("- Temporais: `month`, `day_of_week`\n")
-        f.write("- Epidemiologicas: `cases`, `deaths`, `new_cases`, `new_deaths`, `new_cases_ma7`, `new_deaths_ma7`, `cfr`\n\n")
+        f.write("- Usadas pelos modelos: `month`, `day_of_week`, `new_cases`, `new_deaths`, `cfr`\n")
+        f.write("- Mantidas para analise: `cases`, `deaths`, `new_cases_ma7`, `new_deaths_ma7`\n")
+        f.write("- Indicador de qualidade: `deaths_was_missing`\n")
+        f.write(
+            "- Para modelagem, `deaths` ausente recebe zero somente apos a criacao do indicador; "
+            "a limitacao de cobertura permanece documentada.\n\n"
+        )
         f.write("## Pontos de corte da variavel alvo\n")
         f.write(f"- q33 (low/medium): `{q1:.4f}`\n")
         f.write(f"- q66 (medium/high): `{q2:.4f}`\n\n")

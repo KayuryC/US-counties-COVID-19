@@ -13,50 +13,50 @@
 
 ## Probabilidades a priori do Bayes
 - Calculadas diretamente na populacao de treino anterior ao corte temporal, antes da subamostragem.
-- P(low): `0.3534` (35.34%)
-- P(medium): `0.3297` (32.97%)
-- P(high): `0.3169` (31.69%)
+- P(low): `0.3531` (35.31%)
+- P(medium): `0.3300` (33.00%)
+- P(high): `0.3170` (31.70%)
 
 ## Distribuicao das classes nas amostras
-- Treino: low=35.44%, medium=32.89%, high=31.67%
-- Teste: low=30.15%, medium=28.29%, high=41.56%
+- Treino: low=35.40%, medium=32.92%, high=31.68%
+- Teste: low=30.12%, medium=28.31%, high=41.57%
 
 ## Comparacao de metricas
 ### Bayes Manual
-- Acuracia: `0.5934`
-- Precisao (weighted): `0.6910`
-- Recall (weighted): `0.5934`
-- F1-score (weighted): `0.5897`
+- Acuracia: `0.5925`
+- Precisao (weighted): `0.6897`
+- Recall (weighted): `0.5925`
+- F1-score (weighted): `0.5874`
 - Matriz de confusao (linhas=real, colunas=predito; ordem: low, medium, high):
-  `[[24528, 2526, 78], [13604, 10931, 927], [12463, 6993, 17950]]`
+  `[[24889, 2144, 78], [14318, 10159, 999], [12557, 6579, 18277]]`
 
 ### Regressao Logistica
-- Acuracia: `0.6039`
+- Acuracia: `0.6037`
 - Precisao (weighted): `0.6551`
-- Recall (weighted): `0.6039`
-- F1-score (weighted): `0.5964`
+- Recall (weighted): `0.6037`
+- F1-score (weighted): `0.5963`
 - Matriz de confusao (linhas=real, colunas=predito; ordem: low, medium, high):
-  `[[23130, 3789, 213], [12570, 8292, 4600], [12502, 1974, 22930]]`
+  `[[23110, 3790, 211], [12585, 8306, 4585], [12505, 1988, 22920]]`
 
 ### Arvore de Decisao
-- Acuracia: `0.6596`
-- Precisao (weighted): `0.6715`
-- Recall (weighted): `0.6596`
-- F1-score (weighted): `0.6588`
+- Acuracia: `0.6594`
+- Precisao (weighted): `0.6713`
+- Recall (weighted): `0.6594`
+- F1-score (weighted): `0.6586`
 - Matriz de confusao (linhas=real, colunas=predito; ordem: low, medium, high):
-  `[[21052, 5304, 776], [8780, 11760, 4922], [6200, 4656, 26550]]`
+  `[[21018, 5310, 783], [8785, 11770, 4921], [6196, 4663, 26554]]`
 
 ## Classification reports
 ### Bayes Manual
 ```text
               precision    recall  f1-score   support
 
-         low       0.48      0.90      0.63     27132
-      medium       0.53      0.43      0.48     25462
-        high       0.95      0.48      0.64     37406
+         low       0.48      0.92      0.63     27111
+      medium       0.54      0.40      0.46     25476
+        high       0.94      0.49      0.64     37413
 
     accuracy                           0.59     90000
-   macro avg       0.66      0.60      0.58     90000
+   macro avg       0.65      0.60      0.58     90000
 weighted avg       0.69      0.59      0.59     90000
 ```
 
@@ -64,9 +64,9 @@ weighted avg       0.69      0.59      0.59     90000
 ```text
               precision    recall  f1-score   support
 
-         low       0.48      0.85      0.61     27132
-      medium       0.59      0.33      0.42     25462
-        high       0.83      0.61      0.70     37406
+         low       0.48      0.85      0.61     27111
+      medium       0.59      0.33      0.42     25476
+        high       0.83      0.61      0.70     37413
 
     accuracy                           0.60     90000
    macro avg       0.63      0.60      0.58     90000
@@ -77,9 +77,9 @@ weighted avg       0.66      0.60      0.60     90000
 ```text
               precision    recall  f1-score   support
 
-         low       0.58      0.78      0.67     27132
-      medium       0.54      0.46      0.50     25462
-        high       0.82      0.71      0.76     37406
+         low       0.58      0.78      0.67     27111
+      medium       0.54      0.46      0.50     25476
+        high       0.82      0.71      0.76     37413
 
     accuracy                           0.66     90000
    macro avg       0.65      0.65      0.64     90000

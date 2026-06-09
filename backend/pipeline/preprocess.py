@@ -65,10 +65,23 @@ def build_data_quality_report(input_csv: Path, output_report: Path) -> None:
         f.write(f"- Data mínima: `{min_date.date() if pd.notna(min_date) else 'N/A'}`\n")
         f.write(f"- Data máxima: `{max_date.date() if pd.notna(max_date) else 'N/A'}`\n\n")
 
-        f.write("## 7) Próximas ações sugeridas\n")
-        f.write("- Definir estratégia para `fips` ausente (manter, imputar ou remover por contexto).\n")
-        f.write("- Validar se existem saltos temporais por condado após ordenar por data.\n")
-        f.write("- Confirmar se `cases` e `deaths` são cumulativos e tratar anomalias de monotonicidade.\n")
+        f.write("## 7) Encaminhamento para a limpeza\n")
+        f.write(
+            "- `fips` ausente será mantido como `NA`: não existe imputação segura e as análises "
+            "podem usar `state+county` como chave.\n"
+        )
+        f.write(
+            "- `deaths` ausente será preservado no dataset limpo; a ausência está concentrada "
+            "em Porto Rico e representa cobertura incompleta, não zero confirmado.\n"
+        )
+        f.write(
+            "- As séries são cumulativas. Quedas entre datas serão contabilizadas como revisões "
+            "da fonte, e diferenças negativas serão limitadas a zero na engenharia de atributos.\n"
+        )
+        f.write(
+            "- Valores extremos serão descritos por quantis e IQR; não serão removidos "
+            "automaticamente porque podem corresponder a ondas ou notificações acumuladas.\n"
+        )
 
 
 if __name__ == "__main__":

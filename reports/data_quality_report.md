@@ -35,7 +35,8 @@
 - Data mínima: `2020-01-21`
 - Data máxima: `2022-05-13`
 
-## 7) Próximas ações sugeridas
-- Definir estratégia para `fips` ausente (manter, imputar ou remover por contexto).
-- Validar se existem saltos temporais por condado após ordenar por data.
-- Confirmar se `cases` e `deaths` são cumulativos e tratar anomalias de monotonicidade.
+## 7) Encaminhamento para a limpeza
+- `fips` ausente será mantido como `NA`: não existe imputação segura e as análises podem usar `state+county` como chave.
+- `deaths` ausente será preservado no dataset limpo; a ausência está concentrada em Porto Rico e representa cobertura incompleta, não zero confirmado.
+- As séries são cumulativas. Quedas entre datas serão contabilizadas como revisões da fonte, e diferenças negativas serão limitadas a zero na engenharia de atributos.
+- Valores extremos serão descritos por quantis e IQR; não serão removidos automaticamente porque podem corresponder a ondas ou notificações acumuladas.
