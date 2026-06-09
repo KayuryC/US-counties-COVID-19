@@ -4,12 +4,11 @@
 
 **Projeto:** US Counties COVID-19 - Estatística e Probabilidade
 
-**Integrantes:** `[PREENCHER COM OS NOMES COMPLETOS]`
+**Integrantes:** `KAYURY CARNEIRO DA SILVA`
 
 ## Ferramenta utilizada
 
 - OpenAI Codex/ChatGPT;
-- `[ACRESCENTAR OUTRAS FERRAMENTAS, CASO TENHAM SIDO UTILIZADAS]`.
 
 ## O que foi feito com apoio de IA
 
