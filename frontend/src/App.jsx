@@ -24,8 +24,48 @@ const methodLabels = {
   logistic_regression: 'Regressao Logistica',
   decision_tree: 'Arvore de Decisao',
 }
+const fallbackModelMetrics = {
+  class_order: riskClasses,
+  validation: {
+    cutoff: '2021-11-26',
+    train_sample: 360000,
+    test_sample: 90000,
+  },
+  priors: {
+    low: 0.3531,
+    medium: 0.33,
+    high: 0.317,
+  },
+  models: {
+    bayes: {
+      label: 'Bayes Manual',
+      accuracy: 0.5925,
+      precision_weighted: 0.6897,
+      recall_weighted: 0.5925,
+      f1_weighted: 0.5874,
+      confusion_matrix: [[24889, 2144, 78], [14318, 10159, 999], [12557, 6579, 18277]],
+    },
+    logistic_regression: {
+      label: 'Regressao Logistica',
+      accuracy: 0.6037,
+      precision_weighted: 0.6551,
+      recall_weighted: 0.6037,
+      f1_weighted: 0.5963,
+      confusion_matrix: [[23110, 3790, 211], [12585, 8306, 4585], [12505, 1988, 22920]],
+    },
+    decision_tree: {
+      label: 'Arvore de Decisao',
+      accuracy: 0.6594,
+      precision_weighted: 0.6713,
+      recall_weighted: 0.6594,
+      f1_weighted: 0.6586,
+      confusion_matrix: [[21018, 5310, 783], [8785, 11770, 4921], [6196, 4663, 26554]],
+    },
+  },
+}
 
 const formatNumber = (n) => new Intl.NumberFormat('en-US').format(n)
+const formatMetric = (n) => Number(n || 0).toFixed(4)
 
 function toPolylinePoints(data, width, height, pad = 12) {
   const min = Math.min(...data)
@@ -58,6 +98,7 @@ export default function App() {
   const [form, setForm] = useState({ month: 6, day_of_week: 1, new_cases: 10, new_deaths: 0, cfr: 0.01 })
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
+  const [modelMetrics, setModelMetrics] = useState(fallbackModelMetrics)
   const [overview, setOverview] = useState({
     kpis: {
       period_start: '2020-01-21',
@@ -65,6 +106,8 @@ export default function App() {
       rows: 2502832,
       states: 56,
       counties: 3277,
+      missing_deaths: 57605,
+      missing_deaths_locations: ['Puerto Rico'],
     },
     state_totals: fallbackStateTotals,
     window_state_totals: {
@@ -84,6 +127,14 @@ export default function App() {
     state_rates: fallbackStateTotals.map((d) => ({ ...d, cfr: Number(((d.mortes / d.casos) * 100).toFixed(3)) })),
     top_counties: [],
     class_balance: fallbackClassBalance,
+    daily_distributions: {
+      new_cases: { x: [], counts: [] },
+      new_deaths: { x: [], counts: [] },
+    },
+    distribution_summary: {
+      new_cases: {},
+      new_deaths: {},
+    },
     monthly_trend: [],
     weekday_profile: [],
     peak_summary: {
@@ -117,6 +168,20 @@ export default function App() {
       }
     }
     loadOverview()
+  }, [])
+
+  useEffect(() => {
+    const loadMetrics = async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/model/metrics`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.models) setModelMetrics(data)
+      } catch (_) {
+        // fallback local ja definido no estado inicial
+      }
+    }
+    loadMetrics()
   }, [])
 
   const onSubmit = async (e) => {
@@ -159,6 +224,14 @@ export default function App() {
     .slice(0, 10)
   const cfrRank = [...(overview.state_rates || [])].sort((a, b) => b.cfr - a.cfr).slice(0, 10)
   const getProbabilities = (key) => result?.[key]?.probabilities || { low: 0, medium: 0, high: 0 }
+  const modelEntries = Object.entries(modelMetrics.models || {}).map(([key, values]) => ({ key, ...values }))
+  const bestModel = modelEntries.reduce(
+    (best, current) => (!best || current.accuracy > best.accuracy ? current : best),
+    null,
+  )
+  const distributionKey = metric === 'casos' ? 'new_cases' : 'new_deaths'
+  const distribution = overview.daily_distributions?.[distributionKey] || { x: [], counts: [] }
+  const distributionSummary = overview.distribution_summary?.[distributionKey] || {}
   const basePlotLayout = {
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(0,0,0,0)',
@@ -226,11 +299,16 @@ export default function App() {
         <article className="kpi reveal"><span>Condados Unicos</span><strong>{formatNumber(overview.kpis.counties)}</strong></article>
         <article className="kpi reveal"><span>Estados/Territorios</span><strong>{formatNumber(overview.kpis.states)}</strong></article>
       </section>
+      <aside className="qualityNotice reveal">
+        <strong>Nota de qualidade dos dados:</strong> {formatNumber(overview.kpis.missing_deaths || 0)} registros
+        sem mortes reportadas, concentrados em {(overview.kpis.missing_deaths_locations || []).join(', ') || 'local nao informado'}.
+        Esses valores permanecem ausentes no dataset tratado.
+      </aside>
 
       {activeSection === 'secao-1' && <section className="sectionBlock reveal" id="secao-1">
         <div className="sectionTitle">
           <h2>Secao 1 - Analise dos Dados</h2>
-          <p>Graficos com objetivo analitico explicito, conforme a rubricade avaliacao.</p>
+          <p>Graficos com objetivo analitico explicito, conforme a rubrica de avaliacao.</p>
         </div>
         <div className="layout">
           <article className="card chartCard">
@@ -273,6 +351,33 @@ export default function App() {
               ))}
             </div>
             <p className="legend">Leitura rapida: as tres classes estao proximas de 33%, indicando base balanceada.</p>
+          </article>
+
+          <article className="card chartCard full">
+            <h3>Objetivo: analisar a distribuicao e a assimetria das variacoes diarias</h3>
+            <Plot
+              data={[
+                {
+                  type: 'bar',
+                  x: distribution.x,
+                  y: distribution.counts,
+                  marker: { color: metric === 'casos' ? '#0f766e' : '#0b4f6c' },
+                  hovertemplate: 'log(1 + valor): %{x:.2f}<br>Registros: %{y:,}<extra></extra>',
+                },
+              ]}
+              layout={{
+                ...basePlotLayout,
+                xaxis: { title: `log(1 + novos ${metric})` },
+                yaxis: { title: 'Frequencia', gridcolor: '#dbe7ef' },
+              }}
+              config={{ displayModeBar: false, responsive: true }}
+              style={{ width: '100%', height: '320px' }}
+            />
+            <p className="legend">
+              Mediana: {distributionSummary['0.5'] ?? '-'} | P90: {distributionSummary['0.9'] ?? '-'} |
+              P99: {distributionSummary['0.99'] ?? '-'} | P99,9: {distributionSummary['0.999'] ?? '-'}.
+              A escala logaritmica preserva valores extremos sem deixar a maior parte dos registros invisivel.
+            </p>
           </article>
 
           <article className="card chartCard full">
@@ -512,9 +617,9 @@ export default function App() {
               <form onSubmit={onSubmit} className="predictForm">
                 <label>Mes do registro <input type="number" min="1" max="12" value={form.month} onChange={(e) => onChange('month', e.target.value)} /></label>
                 <label>Dia da semana (0 a 6) <input type="number" min="0" max="6" value={form.day_of_week} onChange={(e) => onChange('day_of_week', e.target.value)} /></label>
-                <label>Novos casos <input type="number" value={form.new_cases} onChange={(e) => onChange('new_cases', e.target.value)} /></label>
-                <label>Novas mortes <input type="number" value={form.new_deaths} onChange={(e) => onChange('new_deaths', e.target.value)} /></label>
-                <label>Taxa CFR <input type="text" value={String(form.cfr).replace('.', ',')} onChange={(e) => onChange('cfr', e.target.value)} /></label>
+                <label>Novos casos <input type="number" min="0" value={form.new_cases} onChange={(e) => onChange('new_cases', e.target.value)} /></label>
+                <label>Novas mortes <input type="number" min="0" value={form.new_deaths} onChange={(e) => onChange('new_deaths', e.target.value)} /></label>
+                <label>Taxa CFR (0 a 1) <input type="number" min="0" max="1" step="0.001" value={form.cfr} onChange={(e) => onChange('cfr', e.target.value)} /></label>
                 <button type="submit">Calcular classificacao</button>
               </form>
               {error && <p className="error">{error}</p>}
@@ -554,6 +659,7 @@ export default function App() {
                     )
                   })}
                 </div>
+                {result && <p className="modelStatus">Artefatos reais carregados: {result.model_status === 'real_artifacts_loaded' ? 'sim' : 'nao'}.</p>}
               </div>
             </div>
           </div>
@@ -561,11 +667,21 @@ export default function App() {
           <article className="card formulaCard">
             <h3>Como a classificacao probabilistica e calculada?</h3>
             <div className="formulaGrid">
-              <div><span>1</span><strong>Priori P(C)</strong><small>frequencia de cada classe no dataset</small></div>
+              <div>
+                <span>1</span><strong>Priori P(C)</strong>
+                <small>
+                  low {(modelMetrics.priors.low * 100).toFixed(2)}% |
+                  medium {(modelMetrics.priors.medium * 100).toFixed(2)}% |
+                  high {(modelMetrics.priors.high * 100).toFixed(2)}%
+                </small>
+              </div>
               <div><span>2</span><strong>Verossimilhanca P(X|C)</strong><small>probabilidade dos atributos observados em cada classe</small></div>
               <div><span>3</span><strong>Posteriori P(C|X)</strong><small>classe mais provavel apos observar os atributos</small></div>
             </div>
-            <p className="legend">Observacao: o endpoint de predicao ainda esta em modo provisório; a proxima etapa e conectar os artefatos reais de Bayes, Regressao Logistica e Arvore.</p>
+            <p className="legend">
+              O endpoint utiliza os artefatos treinados de Bayes Manual, Regressao Logistica e Arvore de Decisao.
+              As probabilidades da Arvore e da Regressao complementam a comparacao, mas a posteriori exigida e calculada explicitamente pelo Bayes.
+            </p>
           </article>
         </div>
       </section>}
@@ -575,26 +691,57 @@ export default function App() {
           <h2>Secao 3 - Comparacao de Metricas</h2>
           <p>Acuracia, precisao, recall, F1-score e matriz de confusao entre Bayes e classificadores.</p>
         </div>
-        <div className="layout">
-          <article className="card">
-            <h3>Painel de Metricas (base atual)</h3>
+        <div className="metricsLayout">
+          <article className="card metricsSummary">
+            <h3>Painel de Metricas da Validacao Temporal</h3>
             <table className="metricsTable">
-              <thead><tr><th>Metodo</th><th>Acuracia</th><th>F1 (weighted)</th></tr></thead>
+              <thead>
+                <tr><th>Metodo</th><th>Acuracia</th><th>Precisao</th><th>Recall</th><th>F1</th></tr>
+              </thead>
               <tbody>
-                <tr><td>Bayes Manual</td><td>0.6425</td><td>0.6328</td></tr>
-                <tr><td>Regressao Logistica</td><td>0.6317</td><td>0.6341</td></tr>
-                <tr><td>Arvore de Decisao</td><td>0.7304</td><td>0.7278</td></tr>
+                {modelEntries.map((model) => (
+                  <tr key={model.key}>
+                    <td>{model.label}</td>
+                    <td>{formatMetric(model.accuracy)}</td>
+                    <td>{formatMetric(model.precision_weighted)}</td>
+                    <td>{formatMetric(model.recall_weighted)}</td>
+                    <td>{formatMetric(model.f1_weighted)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </article>
           <article className="card">
             <h3>Leitura rapida</h3>
             <ul className="plainList">
-              <li>Melhor acuracia: Arvore de Decisao.</li>
-              <li>Bayes entrega interpretabilidade probabilistica.</li>
-              <li>A comparacao visual sera expandida com matriz de confusao.</li>
+              <li>Melhor acuracia: {bestModel?.label} ({formatMetric(bestModel?.accuracy)}).</li>
+              <li>Treino usa datas anteriores a {modelMetrics.validation.cutoff}; teste usa datas a partir desse corte.</li>
+              <li>A amostra de teste possui {formatNumber(modelMetrics.validation.test_sample)} registros futuros.</li>
+              <li>Bayes fornece a decomposicao explicita em priori, verossimilhanca e posteriori.</li>
             </ul>
           </article>
+        </div>
+        <div className="matrixGrid">
+          {modelEntries.map((model) => (
+            <article className="card matrixCard" key={model.key}>
+              <h3>Matriz de confusao: {model.label}</h3>
+              <table className="matrixTable">
+                <thead>
+                  <tr><th>Real \ Predito</th>{riskClasses.map((klass) => <th key={klass}>{klass}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {riskClasses.map((klass, rowIndex) => (
+                    <tr key={klass}>
+                      <th>{klass}</th>
+                      {riskClasses.map((predicted, columnIndex) => (
+                        <td key={predicted}>{formatNumber(model.confusion_matrix[rowIndex][columnIndex])}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </article>
+          ))}
         </div>
       </section>}
 
@@ -605,9 +752,11 @@ export default function App() {
         </div>
         <article className="card">
           <ul className="plainList">
-            <li>Conclusao principal: modelos conseguem discriminar niveis de risco com desempenho moderado a bom.</li>
+            <li>Conclusao principal: {bestModel?.label} obteve a melhor acuracia temporal, com {formatMetric(bestModel?.accuracy)}.</li>
+            <li>Avaliacao temporal e mais realista e resultou em metricas inferiores as obtidas com divisao aleatoria.</li>
             <li>Limitacao: variavel alvo derivada pode reduzir generalizacao fora do contexto observado.</li>
-            <li>Proximo refinamento: incluir validacao temporal e calibracao das probabilidades.</li>
+            <li>Limitacao de dados: mortes por condado em Porto Rico nao foram reportadas pela fonte.</li>
+            <li>Proximo refinamento: calibrar probabilidades e incluir variaveis populacionais por condado.</li>
           </ul>
         </article>
       </section>}

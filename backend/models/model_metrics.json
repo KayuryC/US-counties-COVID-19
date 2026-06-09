@@ -1,0 +1,94 @@
+{
+  "class_order": [
+    "low",
+    "medium",
+    "high"
+  ],
+  "validation": {
+    "strategy": "temporal_80_20_unique_dates",
+    "cutoff": "2021-11-26",
+    "train_population": 1953097,
+    "test_population": 549735,
+    "train_sample": 360000,
+    "test_sample": 90000
+  },
+  "priors": {
+    "low": 0.3530531253696053,
+    "medium": 0.32999231476982455,
+    "high": 0.31695455986057014
+  },
+  "models": {
+    "bayes": {
+      "label": "Bayes Manual",
+      "accuracy": 0.5925,
+      "precision_weighted": 0.6897025360923812,
+      "recall_weighted": 0.5925,
+      "f1_weighted": 0.5874477239412045,
+      "confusion_matrix": [
+        [
+          24889,
+          2144,
+          78
+        ],
+        [
+          14318,
+          10159,
+          999
+        ],
+        [
+          12557,
+          6579,
+          18277
+        ]
+      ]
+    },
+    "logistic_regression": {
+      "label": "Regressao Logistica",
+      "accuracy": 0.6037333333333333,
+      "precision_weighted": 0.6551342134508799,
+      "recall_weighted": 0.6037333333333333,
+      "f1_weighted": 0.5963223209607811,
+      "confusion_matrix": [
+        [
+          23110,
+          3790,
+          211
+        ],
+        [
+          12585,
+          8306,
+          4585
+        ],
+        [
+          12505,
+          1988,
+          22920
+        ]
+      ]
+    },
+    "decision_tree": {
+      "label": "Arvore de Decisao",
+      "accuracy": 0.6593555555555556,
+      "precision_weighted": 0.6712997423202216,
+      "recall_weighted": 0.6593555555555556,
+      "f1_weighted": 0.6586356858516246,
+      "confusion_matrix": [
+        [
+          21018,
+          5310,
+          783
+        ],
+        [
+          8785,
+          11770,
+          4921
+        ],
+        [
+          6196,
+          4663,
+          26554
+        ]
+      ]
+    }
+  }
+}

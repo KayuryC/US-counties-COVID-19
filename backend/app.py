@@ -1,8 +1,10 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+import json
 from pathlib import Path
 from typing import Optional
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 import joblib
 import numpy as np
@@ -19,17 +21,18 @@ app.add_middleware(
 
 
 class PredictInput(BaseModel):
-    month: int
-    day_of_week: int
-    new_cases: float
-    new_deaths: float
-    cfr: float
+    month: int = Field(ge=1, le=12)
+    day_of_week: int = Field(ge=0, le=6)
+    new_cases: float = Field(ge=0)
+    new_deaths: float = Field(ge=0)
+    cfr: float = Field(ge=0, le=1)
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CLEAN_CSV = ROOT / "data" / "processed" / "us-counties-clean.csv"
 MODEL_CSV = ROOT / "data" / "processed" / "us-counties-model.csv"
 MODELS_DIR = ROOT / "backend" / "models"
+MODEL_METRICS_JSON = MODELS_DIR / "model_metrics.json"
 FEATURES = ["month", "day_of_week", "new_cases", "new_deaths", "cfr"]
 RISK_CLASSES = ["low", "medium", "high"]
 
@@ -43,6 +46,13 @@ def load_prediction_artifacts() -> Optional[dict[str, object]]:
     if not all(path.exists() for path in paths.values()):
         return None
     return {name: joblib.load(path) for name, path in paths.items()}
+
+
+def load_model_metrics() -> Optional[dict]:
+    if not MODEL_METRICS_JSON.exists():
+        return None
+    with MODEL_METRICS_JSON.open(encoding="utf-8") as f:
+        return json.load(f)
 
 
 def gaussian_logpdf(x: np.ndarray, mean: np.ndarray, var: np.ndarray) -> np.ndarray:
@@ -81,11 +91,21 @@ def predict_sklearn(row: np.ndarray, model: object) -> dict:
     return payload
 
 
-def build_class_balance(clean_df: pd.DataFrame) -> list[dict]:
+def _histogram_payload(values: pd.Series, bins: int = 32) -> dict:
+    transformed = np.log1p(values.astype(float).clip(lower=0))
+    counts, edges = np.histogram(transformed, bins=bins)
+    centers = (edges[:-1] + edges[1:]) / 2
+    return {
+        "x": [round(float(value), 4) for value in centers],
+        "counts": [int(value) for value in counts],
+    }
+
+
+def build_model_analytics(clean_df: pd.DataFrame) -> tuple[list[dict], dict, dict]:
     if MODEL_CSV.exists():
-        model_df = pd.read_csv(MODEL_CSV)
-        class_balance = (
-            model_df["risk_level"].value_counts(normalize=True).mul(100).round(2).to_dict()
+        model_df = pd.read_csv(
+            MODEL_CSV,
+            usecols=["risk_level", "new_cases", "new_deaths"],
         )
     else:
         model_df = clean_df.sort_values(["state", "county", "date"]).copy()
@@ -93,6 +113,12 @@ def build_class_balance(clean_df: pd.DataFrame) -> list[dict]:
             model_df.groupby(["state", "county"])["cases"].diff().fillna(model_df["cases"])
         )
         model_df["new_cases"] = model_df["new_cases"].clip(lower=0)
+        model_df["new_deaths"] = (
+            model_df.groupby(["state", "county"])["deaths"]
+            .diff()
+            .fillna(model_df["deaths"])
+            .clip(lower=0)
+        )
         model_df["new_cases_ma7"] = (
             model_df.groupby(["state", "county"])["new_cases"]
             .rolling(7, min_periods=1)
@@ -101,19 +127,34 @@ def build_class_balance(clean_df: pd.DataFrame) -> list[dict]:
         )
         q1 = model_df["new_cases_ma7"].quantile(0.33)
         q2 = model_df["new_cases_ma7"].quantile(0.66)
-        risk_level = pd.cut(
+        model_df["risk_level"] = pd.cut(
             model_df["new_cases_ma7"],
             bins=[-float("inf"), q1, q2, float("inf")],
             labels=["low", "medium", "high"],
             include_lowest=True,
         )
-        class_balance = risk_level.value_counts(normalize=True).mul(100).round(2).to_dict()
 
-    return [
+    class_balance = (
+        model_df["risk_level"].value_counts(normalize=True).mul(100).round(2).to_dict()
+    )
+    class_balance_payload = [
         {"classe": "low", "pct": float(class_balance.get("low", 0.0))},
         {"classe": "medium", "pct": float(class_balance.get("medium", 0.0))},
         {"classe": "high", "pct": float(class_balance.get("high", 0.0))},
     ]
+    distributions = {
+        "new_cases": _histogram_payload(model_df["new_cases"]),
+        "new_deaths": _histogram_payload(model_df["new_deaths"]),
+    }
+    quantiles = [0.5, 0.9, 0.99, 0.999]
+    distribution_summary = {
+        column: {
+            str(quantile): round(float(value), 2)
+            for quantile, value in model_df[column].quantile(quantiles).items()
+        }
+        for column in ["new_cases", "new_deaths"]
+    }
+    return class_balance_payload, distributions, distribution_summary
 
 
 def load_overview_data() -> dict:
@@ -145,7 +186,11 @@ def load_overview_data() -> dict:
         for _, row in state_rates_df.iterrows()
     ]
 
-    class_balance_payload = build_class_balance(clean_df)
+    (
+        class_balance_payload,
+        daily_distributions,
+        distribution_summary,
+    ) = build_model_analytics(clean_df)
 
     daily_us = clean_df.groupby("date", as_index=False)[["cases", "deaths"]].sum()
     daily_us["new_cases"] = daily_us["cases"].diff().fillna(0).clip(lower=0)
@@ -268,6 +313,8 @@ def load_overview_data() -> dict:
         "state_heatmap": heatmap_payload,
         "top_counties": top_counties_payload,
         "class_balance": class_balance_payload,
+        "daily_distributions": daily_distributions,
+        "distribution_summary": distribution_summary,
         "monthly_trend": monthly_payload,
         "weekday_profile": weekday_payload,
         "peak_summary": peak_summary,
@@ -279,6 +326,7 @@ def load_overview_data() -> dict:
 
 OVERVIEW_CACHE = load_overview_data()
 PREDICTION_ARTIFACTS = load_prediction_artifacts()
+MODEL_METRICS_CACHE = load_model_metrics()
 
 
 @app.get('/health')
@@ -289,6 +337,13 @@ def health():
 @app.get('/analytics/overview')
 def analytics_overview():
     return OVERVIEW_CACHE
+
+
+@app.get('/model/metrics')
+def model_metrics():
+    if MODEL_METRICS_CACHE is None:
+        return {"status": "unavailable"}
+    return MODEL_METRICS_CACHE
 
 
 @app.post('/predict')

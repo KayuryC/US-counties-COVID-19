@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import joblib
@@ -223,6 +224,40 @@ def train_and_evaluate(input_csv: Path, output_report: Path, model_dir: Path) ->
     joblib.dump(lr_model, model_dir / "logistic_regression.joblib")
     joblib.dump(dt_model, model_dir / "decision_tree.joblib")
 
+    model_results = [
+        ("bayes", "Bayes Manual", bayes_metrics),
+        ("logistic_regression", "Regressao Logistica", lr_metrics),
+        ("decision_tree", "Arvore de Decisao", dt_metrics),
+    ]
+    metrics_payload = {
+        "class_order": CLASSES.tolist(),
+        "validation": {
+            "strategy": "temporal_80_20_unique_dates",
+            "cutoff": cutoff.date().isoformat(),
+            "train_population": len(train_population),
+            "test_population": len(test_population),
+            "train_sample": len(x_train),
+            "test_sample": len(x_test),
+        },
+        "priors": {
+            klass: float(prior)
+            for klass, prior in zip(CLASSES, population_priors)
+        },
+        "models": {
+            key: {
+                "label": label,
+                "accuracy": float(metrics["accuracy"]),
+                "precision_weighted": float(metrics["precision_weighted"]),
+                "recall_weighted": float(metrics["recall_weighted"]),
+                "f1_weighted": float(metrics["f1_weighted"]),
+                "confusion_matrix": metrics["confusion_matrix"].tolist(),
+            }
+            for key, label, metrics in model_results
+        },
+    }
+    with (model_dir / "model_metrics.json").open("w", encoding="utf-8") as f:
+        json.dump(metrics_payload, f, ensure_ascii=True, indent=2)
+
     output_report.parent.mkdir(parents=True, exist_ok=True)
     with output_report.open("w", encoding="utf-8") as f:
         f.write("# Relatorio de Modelagem e Comparacao\n\n")
@@ -264,14 +299,8 @@ def train_and_evaluate(input_csv: Path, output_report: Path, model_dir: Path) ->
             f.write(f"- {label}: {rendered}\n")
         f.write("\n")
 
-        models = [
-            ("Bayes Manual", bayes_metrics),
-            ("Regressao Logistica", lr_metrics),
-            ("Arvore de Decisao", dt_metrics),
-        ]
-
         f.write("## Comparacao de metricas\n")
-        for name, m in models:
+        for _, name, m in model_results:
             f.write(f"### {name}\n")
             f.write(f"- Acuracia: `{m['accuracy']:.4f}`\n")
             f.write(f"- Precisao (weighted): `{m['precision_weighted']:.4f}`\n")
@@ -283,7 +312,7 @@ def train_and_evaluate(input_csv: Path, output_report: Path, model_dir: Path) ->
             f.write(f"  `{m['confusion_matrix'].tolist()}`\n\n")
 
         f.write("## Classification reports\n")
-        for name, m in models:
+        for _, name, m in model_results:
             f.write(f"### {name}\n")
             f.write("```text\n")
             f.write(m["classification_report"])
