@@ -2,37 +2,40 @@
 
 ## Status geral
 
-O projeto cobre a maior parte dos requisitos principais: dataset real, limpeza, EDA, Bayes, dois classificadores, dashboard e GitHub organizado.
+O núcleo técnico e os documentos obrigatórios estão implementados. Restam apenas ações manuais de identificação e preparação da entrega.
 
-Ainda faltam dois pontos para considerar a entrega 100% fechada:
-- Integrar o endpoint `/predict` aos modelos reais, pois hoje ele ainda usa uma regra provisoria.
-- Escrever o relatorio tecnico final e a declaracao formal de uso de IA generativa.
+## Requisitos
 
-## Requisitos da lauda
-
-| Requisito | Status | Evidencia no projeto |
+| Requisito | Status | Evidência |
 | --- | --- | --- |
-| Dataset real e confiavel | OK | `data/raw/us-counties.csv` |
-| Tratamento e limpeza obrigatorios | OK | `backend/pipeline/preprocess.py`, `backend/pipeline/clean.py`, `reports/data_cleaning_report.md` |
-| EDA com distribuicoes, relacoes, padroes e insights | Em expansao forte | Dashboard, `backend/app.py`, `reports/eda_report.md` |
-| Variavel alvo categorica | OK | `risk_level` em `backend/pipeline/prepare_model_data.py` |
-| Teorema de Bayes com priori, verossimilhanca e posterior | Parcialmente OK | `backend/pipeline/train_models.py`, falta expor modelo real no `/predict` |
-| Dois classificadores | OK | Regressao Logistica e Arvore de Decisao em `backend/pipeline/train_models.py` |
-| Metricas e comparacao | OK | `reports/model_comparison_report.md`, Secao 3 do dashboard |
-| Dashboard interativo | OK, em evolucao | `frontend/src/App.jsx`, filtros globais, graficos Plotly |
-| Declaracao de IA generativa | Estrutura criada | Secao 6 do dashboard, falta texto final no relatorio |
-| Relatorio tecnico final | Pendente | Deve consolidar decisoes, codigos, graficos, resultados e conclusoes |
+| Dataset real e confiável | Concluído | `data/raw/us-counties.csv` e link do NYT no README |
+| Tratamento e limpeza obrigatórios | Concluído | `backend/pipeline/clean.py` e `reports/data_cleaning_report.md` |
+| Justificativa e impacto dos tratamentos | Concluído | Seção 4 do relatório técnico |
+| Distribuições quantitativas e qualitativas | Concluído | EDA, figuras e dashboard |
+| Correlações, padrões, tendências e insights | Concluído | `reports/eda_report.md` e Seção 1 do dashboard |
+| Variável alvo categórica | Concluído | `risk_level` em `prepare_model_data.py` |
+| Prioris diretamente dos dados | Concluído | Distribuição temporal de treino em `model_metrics.json` |
+| Verossimilhança e posteriori de Bayes | Concluído | Bayes manual e probabilidades exibidas no dashboard |
+| Dois classificadores adicionais | Concluído | Regressão Logística e Árvore de Decisão |
+| Métricas e matrizes de confusão | Concluído | Dashboard e relatório de comparação |
+| Entrada de novos dados pelo usuário | Concluído | Formulário da Seção 2 e endpoint `/predict` |
+| Comparação visual dos três métodos | Concluído | Predições e probabilidades na Seção 2 |
+| Relatório técnico estruturado | Concluído | `reports/technical_report.md` |
+| Declaração de IA generativa | Concluído | `reports/ai_usage_declaration.md` |
+| GitHub organizado e README explicativo | Concluído | Estrutura, instruções, testes e histórico de commits |
 
-## Analises exploratorias adicionadas ao dashboard
+## Pendências manuais antes da entrega
 
-- KPIs gerais do dataset.
-- Ranking de estados por casos/mortes, com filtro por periodo e Top N.
-- Distribuicao da variavel alvo `risk_level`.
-- Serie temporal com media movel de casos e mortes.
-- Mapa de calor dos EUA por estado.
-- Resumo de picos temporais.
-- Dispersao casos x mortes por estado.
-- Ranking de letalidade acumulada (CFR).
-- Evolucao mensal de casos/mortes.
-- Top condados por casos/mortes.
-- Perfil medio por dia da semana.
+- Preencher os nomes completos dos integrantes no README e nos documentos.
+- Acrescentar outras ferramentas de IA utilizadas pela equipe, caso existam.
+- Exportar o relatório técnico e a declaração de IA para PDF, se o professor exigir esse formato.
+- Conferir os links enviados no formulário ou ambiente de entrega.
+- Ensaiar a arguição individual sobre limpeza, Bayes, modelos e limitações.
+
+## Verificações técnicas
+
+- Testes automatizados: `python3 -m unittest discover -s tests -v`
+- Build do frontend: `npm run build`
+- Saúde da API: `GET /health`
+- Artefatos reais: `backend/models/*.joblib`
+- Métricas estruturadas: `backend/models/model_metrics.json`

@@ -768,9 +768,11 @@ export default function App() {
         </div>
         <article className="card">
           <ul className="plainList">
-            <li>Fonte do dataset: NYT US Counties COVID-19.</li>
+            <li>Fonte do dataset: The New York Times COVID-19 Data, arquivo <code>us-counties.csv</code>.</li>
+            <li>Periodo analisado: 2020-01-21 a 2022-05-13, com 2.502.832 registros.</li>
             <li>Pipeline: preprocessamento, limpeza, EDA, feature engineering, modelagem.</li>
-            <li>Repositorio GitHub com commits por etapa.</li>
+            <li>Validacao: divisao temporal com teste em datas futuras.</li>
+            <li>Relatorio tecnico e declaracao de IA disponiveis na pasta <code>reports</code>.</li>
           </ul>
         </article>
       </section>}
@@ -782,9 +784,10 @@ export default function App() {
         </div>
         <article className="card">
           <ul className="plainList">
-            <li>Uso de IA para apoio em estruturacao de codigo e interface.</li>
-            <li>Objetivo: acelerar prototipacao sem substituir entendimento conceitual.</li>
-            <li>Dificuldades: desenho de pipeline, visualizacao e integracao backend/frontend.</li>
+            <li>O que foi feito: apoio na estruturacao, depuracao, testes, interface e documentacao.</li>
+            <li>Objetivo de aprendizado: compreender Bayes, validacao temporal e integracao entre dados, API e dashboard.</li>
+            <li>Dificuldades: grande volume de dados, ausencias, valores extremos e sincronizacao dos artefatos com o frontend.</li>
+            <li>Verificacao: todas as sugestoes foram conferidas por execucao do pipeline, testes e revisao dos resultados.</li>
           </ul>
         </article>
       </section>}
