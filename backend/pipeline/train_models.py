@@ -12,9 +12,8 @@ from sklearn.metrics import (
     confusion_matrix,
     precision_recall_fscore_support,
 )
-from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import FunctionTransformer, StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 
 
@@ -26,6 +25,9 @@ FEATURES = [
     "cfr",
 ]
 TARGET = "risk_level"
+CLASSES = np.array(["low", "medium", "high"])
+TRAIN_SAMPLE_LIMIT = 360_000
+TEST_SAMPLE_LIMIT = 90_000
 
 
 def _gaussian_logpdf(x: np.ndarray, mean: np.ndarray, var: np.ndarray) -> np.ndarray:
@@ -35,9 +37,12 @@ def _gaussian_logpdf(x: np.ndarray, mean: np.ndarray, var: np.ndarray) -> np.nda
 
 
 def fit_predict_manual_bayes(
-    x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_test: np.ndarray,
+    class_priors: np.ndarray | None = None,
 ) -> np.ndarray:
-    artifact = fit_manual_bayes(x_train, y_train)
+    artifact = fit_manual_bayes(x_train, y_train, class_priors=class_priors)
     classes = artifact["classes"]
 
     predictions: list[str] = []
@@ -47,22 +52,42 @@ def fit_predict_manual_bayes(
     return np.array(predictions)
 
 
-def fit_manual_bayes(x_train: np.ndarray, y_train: np.ndarray) -> dict[str, object]:
-    classes = np.array(["low", "medium", "high"])
-    class_priors: list[float] = []
+def calculate_class_priors(y: np.ndarray) -> np.ndarray:
+    counts = np.array([(y == klass).sum() for klass in CLASSES], dtype=float)
+    if np.any(counts == 0):
+        missing = CLASSES[counts == 0].tolist()
+        raise ValueError(f"Classes ausentes no calculo das prioris: {missing}")
+    return counts / counts.sum()
+
+
+def fit_manual_bayes(
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    class_priors: np.ndarray | None = None,
+) -> dict[str, object]:
+    priors = (
+        calculate_class_priors(y_train)
+        if class_priors is None
+        else np.asarray(class_priors, dtype=float)
+    )
+    if priors.shape != (len(CLASSES),):
+        raise ValueError("Uma probabilidade a priori deve ser informada para cada classe.")
+    if not np.isclose(priors.sum(), 1.0):
+        raise ValueError("As probabilidades a priori devem somar 1.")
+
     class_means: list[np.ndarray] = []
     class_vars: list[np.ndarray] = []
 
-    n = len(y_train)
-    for c in classes:
+    for c in CLASSES:
         x_c = x_train[y_train == c]
-        class_priors.append(len(x_c) / n)
+        if len(x_c) == 0:
+            raise ValueError(f"A classe {c!r} nao possui exemplos de treinamento.")
         class_means.append(x_c.mean(axis=0))
         class_vars.append(x_c.var(axis=0))
 
     return {
-        "classes": classes,
-        "priors": np.array(class_priors),
+        "classes": CLASSES,
+        "priors": priors,
         "means": np.vstack(class_means),
         "vars": np.vstack(class_vars),
         "features": FEATURES,
@@ -77,13 +102,52 @@ def manual_bayes_log_posteriors(row: np.ndarray, artifact: dict[str, object]) ->
     return np.log(priors) + _gaussian_logpdf(row, means, variances).sum(axis=1)
 
 
+def temporal_train_test_split(
+    df: pd.DataFrame, train_fraction: float = 0.8
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Timestamp]:
+    if not 0 < train_fraction < 1:
+        raise ValueError("train_fraction deve estar entre 0 e 1.")
+
+    ordered_dates = np.sort(df["date"].dropna().unique())
+    if len(ordered_dates) < 2:
+        raise ValueError("Sao necessarias pelo menos duas datas para a divisao temporal.")
+
+    split_index = min(int(len(ordered_dates) * train_fraction), len(ordered_dates) - 1)
+    cutoff = pd.Timestamp(ordered_dates[split_index])
+    train_df = df[df["date"] < cutoff].copy()
+    test_df = df[df["date"] >= cutoff].copy()
+
+    if train_df.empty or test_df.empty:
+        raise ValueError("A divisao temporal gerou um conjunto vazio.")
+    return train_df, test_df, cutoff
+
+
+def sample_rows(df: pd.DataFrame, limit: int, random_state: int) -> pd.DataFrame:
+    if len(df) <= limit:
+        return df.copy()
+    return df.sample(n=limit, random_state=random_state, replace=False)
+
+
+def class_distribution(y: np.ndarray) -> dict[str, float]:
+    return {
+        klass: float((y == klass).mean())
+        for klass in CLASSES
+    }
+
+
 def summarize_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, object]:
     acc = accuracy_score(y_true, y_pred)
     precision, recall, f1, _ = precision_recall_fscore_support(
         y_true, y_pred, average="weighted", zero_division=0
     )
-    cm = confusion_matrix(y_true, y_pred, labels=["low", "medium", "high"])
-    report = classification_report(y_true, y_pred, zero_division=0)
+    cm = confusion_matrix(y_true, y_pred, labels=CLASSES)
+    report = classification_report(
+        y_true,
+        y_pred,
+        labels=CLASSES,
+        target_names=CLASSES,
+        zero_division=0,
+    )
     return {
         "accuracy": acc,
         "precision_weighted": precision,
@@ -95,36 +159,50 @@ def summarize_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, objec
 
 
 def train_and_evaluate(input_csv: Path, output_report: Path, model_dir: Path) -> None:
-    df = pd.read_csv(input_csv)
+    df = pd.read_csv(input_csv, parse_dates=["date"])
     df = df.replace([np.inf, -np.inf], np.nan)
-    df = df.dropna(subset=FEATURES + [TARGET])
+    df = df.dropna(subset=["date"] + FEATURES + [TARGET])
 
-    # Subamostragem para manter tempo de treino estável em máquina local.
-    if len(df) > 450_000:
-        samples: list[pd.DataFrame] = []
-        for _, g in df.groupby(TARGET):
-            samples.append(g.sample(n=min(len(g), 150_000), random_state=42, replace=False))
-        df = pd.concat(samples, ignore_index=True)
-
-    x = df[FEATURES].astype(float).values
-    y = df[TARGET].astype(str).values
-
-    x_train, x_test, y_train, y_test = train_test_split(
-        x, y, test_size=0.2, random_state=42, stratify=y
+    train_population, test_population, cutoff = temporal_train_test_split(df)
+    population_priors = calculate_class_priors(
+        train_population[TARGET].astype(str).values
     )
 
+    # Mantem a proporcao natural das classes, limitando apenas o custo local.
+    train_df = sample_rows(train_population, TRAIN_SAMPLE_LIMIT, random_state=42)
+    test_df = sample_rows(test_population, TEST_SAMPLE_LIMIT, random_state=43)
+
+    x_train = train_df[FEATURES].astype(float).values
+    y_train = train_df[TARGET].astype(str).values
+    x_test = test_df[FEATURES].astype(float).values
+    y_test = test_df[TARGET].astype(str).values
+
     # 1) Bayes manual (modelo gaussiano por classe)
-    bayes_artifact = fit_manual_bayes(x_train, y_train)
-    bayes_pred = fit_predict_manual_bayes(x_train, y_train, x_test)
+    bayes_artifact = fit_manual_bayes(
+        x_train, y_train, class_priors=population_priors
+    )
+    bayes_artifact["prior_source"] = "full_temporal_training_population"
+    bayes_artifact["training_cutoff"] = cutoff.date().isoformat()
+    bayes_pred = fit_predict_manual_bayes(
+        x_train,
+        y_train,
+        x_test,
+        class_priors=population_priors,
+    )
     bayes_metrics = summarize_metrics(y_test, bayes_pred)
 
     # 2) Regressao Logistica
     lr_model = Pipeline(
         [
+            ("log1p", FunctionTransformer(np.log1p, validate=True)),
             ("scaler", StandardScaler()),
             (
                 "model",
-                LogisticRegression(max_iter=1200, solver="saga", random_state=42),
+                LogisticRegression(
+                    max_iter=2000,
+                    solver="lbfgs",
+                    random_state=42,
+                ),
             ),
         ]
     )
@@ -153,8 +231,38 @@ def train_and_evaluate(input_csv: Path, output_report: Path, model_dir: Path) ->
         f.write(f"- Artefatos salvos em: `{model_dir}`\n")
         f.write(f"- Features: `{FEATURES}`\n")
         f.write(f"- Alvo: `{TARGET}`\n")
-        f.write(f"- Amostras usadas: `{len(df)}`\n")
-        f.write(f"- Treino: `{len(x_train)}` | Teste: `{len(x_test)}`\n\n")
+        f.write(
+            "- Regressao Logistica: transformacao `log1p`, padronizacao e solver `lbfgs`\n"
+        )
+        f.write("- Validacao: divisao temporal 80/20 por datas unicas\n")
+        f.write(
+            f"- Corte temporal: treino antes de `{cutoff.date()}`; teste a partir dessa data\n"
+        )
+        f.write(
+            f"- Populacao de treino: `{len(train_population)}` | Populacao de teste: `{len(test_population)}`\n"
+        )
+        f.write(
+            f"- Amostra de treino: `{len(x_train)}` | Amostra de teste: `{len(x_test)}`\n\n"
+        )
+
+        f.write("## Probabilidades a priori do Bayes\n")
+        f.write(
+            "- Calculadas diretamente na populacao de treino anterior ao corte temporal, antes da subamostragem.\n"
+        )
+        for klass, prior in zip(CLASSES, population_priors):
+            f.write(f"- P({klass}): `{prior:.4f}` ({prior * 100:.2f}%)\n")
+        f.write("\n")
+
+        f.write("## Distribuicao das classes nas amostras\n")
+        for label, values in [
+            ("Treino", class_distribution(y_train)),
+            ("Teste", class_distribution(y_test)),
+        ]:
+            rendered = ", ".join(
+                f"{klass}={pct * 100:.2f}%" for klass, pct in values.items()
+            )
+            f.write(f"- {label}: {rendered}\n")
+        f.write("\n")
 
         models = [
             ("Bayes Manual", bayes_metrics),
@@ -169,7 +277,9 @@ def train_and_evaluate(input_csv: Path, output_report: Path, model_dir: Path) ->
             f.write(f"- Precisao (weighted): `{m['precision_weighted']:.4f}`\n")
             f.write(f"- Recall (weighted): `{m['recall_weighted']:.4f}`\n")
             f.write(f"- F1-score (weighted): `{m['f1_weighted']:.4f}`\n")
-            f.write("- Matriz de confusao (linhas=real, colunas=predito; ordem: low, medium, high):\n")
+            f.write(
+                "- Matriz de confusao (linhas=real, colunas=predito; ordem: low, medium, high):\n"
+            )
             f.write(f"  `{m['confusion_matrix'].tolist()}`\n\n")
 
         f.write("## Classification reports\n")
