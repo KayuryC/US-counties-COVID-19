@@ -4,9 +4,7 @@ Projeto acadêmico de análise exploratória, probabilidade e classificação ap
 
 ## Integrantes
 
-- `[PREENCHER: nome completo do integrante 1]`
-- `[PREENCHER: nome completo do integrante 2, se houver]`
-- `[PREENCHER: nome completo do integrante 3, se houver]`
+- `KAYURY CARNEIRO`
 
 ## Problema investigado
 
