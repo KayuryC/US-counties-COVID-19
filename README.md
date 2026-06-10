@@ -5,6 +5,7 @@ Projeto acadêmico de análise exploratória, probabilidade e classificação ap
 ## Integrantes
 
 - `KAYURY CARNEIRO`
+- `JOSÉ SCAF`
 
 ## Problema investigado
 
